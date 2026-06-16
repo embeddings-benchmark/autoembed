@@ -1,0 +1,9 @@
+# model outputs & checkpoints
+out/
+runs/mteb/
+# python
+__pycache__/
+*.pyc
+.venv/
+# data caches
+.cache/
