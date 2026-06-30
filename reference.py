@@ -1,8 +1,9 @@
 # Reference anchors: score off-the-shelf models on the DEV proxy for comparison.
 # Writes the results to runs/reference.md.
-from prepare import evaluate, DEV_TASKS, RUNS_DIR
+from task import evaluate, DEV_TASKS, RUNS_DIR, BASE_MODEL
 
-MODELS = ["sentence-transformers/all-mpnet-base-v2"]  # same-base anchor (our base, fully trained)
+MODELS = [BASE_MODEL,                                  # raw base = the floor to beat
+          "sentence-transformers/all-mpnet-base-v2"]   # same-base anchor (fully trained)
 
 
 def main():

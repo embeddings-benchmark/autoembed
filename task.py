@@ -1,52 +1,21 @@
-# Frozen. The agent must not edit this file.
+# The task: the fixed base model, the dev eval the agent optimizes, and the
+# contamination check. The agent gets a copy; the harness scores from its own.
 import json
-import time
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).parent
 RUNS_DIR = ROOT / "runs"
-MODEL_DIR = ROOT / "out" / "model"
+MODEL_DIR = ROOT / "final_model"  # the agent's submitted model
 SEED = 0
-TRAIN_BUDGET_SECONDS = 30 * 60
-N_MSMARCO = 1_000_000
-BASE_MODEL = "microsoft/mpnet-base"  # fixed: study isolates method/data, not base choice
+BASE_MODEL = os.environ.get("AUTOEMBED_BASE_MODEL", "microsoft/mpnet-base")
 
-# Fast dev proxy: NanoBEIR retrieval, minus MSMARCO (in train) and FiQA (in heldout).
-# The held-out set lives in eval_heldout.py and is never exposed to the agent.
+# Fast dev proxy: NanoBEIR retrieval, minus MSMARCO and FiQA (held out).
 DEV_TASKS = ["NanoArguAnaRetrieval", "NanoClimateFeverRetrieval", "NanoDBPediaRetrieval",
              "NanoFEVERRetrieval", "NanoHotpotQARetrieval", "NanoNFCorpusRetrieval",
              "NanoNQRetrieval", "NanoQuoraRetrieval", "NanoSCIDOCSRetrieval",
              "NanoSciFactRetrieval", "NanoTouche2020Retrieval"]
 TASK_LANGS = ["eng"]
-
-
-def load_train_pool():
-    # NLI + MS MARCO, disjoint from the eval tasks. MS MARCO ships as ID triplets;
-    # we join them to the real query/passage text, not the bare ID strings.
-    from datasets import load_dataset, concatenate_datasets
-
-    nli = load_dataset("sentence-transformers/all-nli", "triplet", split="train")
-    nli = nli.select_columns(["anchor", "positive", "negative"])
-
-    q = load_dataset("sentence-transformers/msmarco", "queries", split="train")
-    qmap = dict(zip(q["query_id"], q["query"]))
-    c = load_dataset("sentence-transformers/msmarco", "corpus", split="train")
-    cmap = dict(zip(c["passage_id"], c["passage"]))
-
-    trip = load_dataset("sentence-transformers/msmarco", "triplets", split="train")
-    step = max(1, len(trip) // N_MSMARCO)  # strided pick for diversity, no full shuffle
-    trip = trip.select(range(0, step * N_MSMARCO, step))
-
-    def to_text(b):
-        return {"anchor": [qmap.get(i, "") for i in b["query_id"]],
-                "positive": [cmap.get(i, "") for i in b["positive_id"]],
-                "negative": [cmap.get(i, "") for i in b["negative_id"]]}
-
-    ms = trip.map(to_text, batched=True, remove_columns=trip.column_names)
-    ms = ms.filter(lambda b: [bool(a and p and n) for a, p, n in
-                              zip(b["anchor"], b["positive"], b["negative"])],
-                   batched=True)
-    return concatenate_datasets([nli, ms]).shuffle(seed=SEED)
 
 
 def evaluate(model_path=MODEL_DIR, tasks=DEV_TASKS, tag="dev"):
@@ -93,8 +62,9 @@ def _eval_texts(tasks, cap=200_000):
 
 
 def check_contamination(train_dataset, tasks=None, sample=100_000):
-    # Exact-match overlap between training and eval text; pass the result to
-    # record_run. Persists the sampled training text for the held-out audit.
+    # Exact-match overlap between training and eval text. Persists the sampled
+    # training text so the harness can audit held-out leakage afterward.
+    # Expects anchor/positive/negative columns (whichever are present).
     tasks = tasks or DEV_TASKS
     evalset = _eval_texts(tasks)
     n = min(sample, len(train_dataset))
@@ -116,19 +86,3 @@ def check_contamination(train_dataset, tasks=None, sample=100_000):
     (RUNS_DIR / "_train_texts.json").write_text(json.dumps(sorted(train_texts)))
     return {"checked": total, "eval_texts": len(evalset), "hits": hits,
             "frac": round(hits / total, 6), "examples": examples}
-
-
-def record_run(score, per_task, notes="", contamination=None, examples=None):
-    RUNS_DIR.mkdir(parents=True, exist_ok=True)
-    run_id = time.strftime("%Y%m%d-%H%M%S")
-    payload = {"id": run_id, "score": score, "per_task": per_task, "notes": notes,
-               "train_py": (ROOT / "train.py").read_text()}
-    if contamination is not None:
-        payload["contamination"] = contamination
-    if examples is not None:
-        payload["examples_seen"] = examples
-    (RUNS_DIR / f"{run_id}.json").write_text(json.dumps(payload, indent=2))
-    ex = f" ex={examples}" if examples is not None else ""
-    with open(RUNS_DIR / "leaderboard.md", "a") as f:
-        f.write(f"- {run_id}  score={score:.4f}{ex}  {notes}\n")
-    return run_id
