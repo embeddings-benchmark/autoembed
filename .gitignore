@@ -1,6 +1,10 @@
-# model outputs & checkpoints
+# model outputs & run artifacts (leaderboard.md is tracked; per-run files are local)
 out/
 runs/mteb/
+runs/_train_texts.json
+runs/*.json
+runs/heldout.md
+runs/reference.md
 # python
 __pycache__/
 *.pyc

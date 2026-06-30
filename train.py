@@ -1,18 +1,17 @@
 # The agent edits this file. Everything is fair game except prepare.py.
 import time
 
-from prepare import (TRAIN_BUDGET_SECONDS, MODEL_DIR, SEED,
-                     load_train_pool, evaluate, record_run)
+from prepare import (TRAIN_BUDGET_SECONDS, MODEL_DIR, SEED, BASE_MODEL,
+                     load_train_pool, evaluate, record_run, check_contamination)
 from sentence_transformers import (SentenceTransformer, SentenceTransformerTrainer,
                                    SentenceTransformerTrainingArguments)
 from sentence_transformers.losses import MultipleNegativesRankingLoss
 from transformers import TrainerCallback
 
-BASE_MODEL = "nreimers/MiniLM-L6-H384-uncased"
-TRAIN_EXAMPLES = 50_000
-BATCH_SIZE = 64
+TRAIN_EXAMPLES = 200_000
+BATCH_SIZE = 128
 LR = 2e-5
-MAX_STEPS = 2000
+MAX_STEPS = 1000
 
 
 class WallClock(TrainerCallback):
@@ -30,6 +29,9 @@ def main():
     model = SentenceTransformer(BASE_MODEL)
     pool = load_train_pool()
     train_ds = pool.select(range(min(TRAIN_EXAMPLES, len(pool))))
+    contam = check_contamination(train_ds)
+    print(f"CONTAMINATION {contam}")
+
     loss = MultipleNegativesRankingLoss(model)
     args = SentenceTransformerTrainingArguments(
         output_dir="out/ckpt", per_device_train_batch_size=BATCH_SIZE,
@@ -40,9 +42,14 @@ def main():
                                          callbacks=[WallClock()])
     trainer.train()
     model.save_pretrained(str(MODEL_DIR))
+
+    steps = trainer.state.global_step
+    examples = steps * BATCH_SIZE  # effective batch on a single device
     score, per_task = evaluate()
-    print(f"DEV score={score:.4f} per_task={per_task} time={time.time()-t0:.0f}s")
-    record_run(score, per_task, notes=f"{BASE_MODEL} bs={BATCH_SIZE} lr={LR}")
+    print(f"DEV={score:.4f} steps={steps} examples={examples} time={time.time()-t0:.0f}s")
+    record_run(score, per_task,
+               notes=f"{BASE_MODEL} bs={BATCH_SIZE} lr={LR} steps={steps}",
+               contamination=contam, examples=examples)
 
 
 if __name__ == "__main__":
