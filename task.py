@@ -1,5 +1,4 @@
-# The task: the fixed base model, the dev eval the agent optimizes, and the
-# contamination check. The agent gets a copy; the harness scores from its own.
+# The task: base model, dev eval, and contamination check.
 import json
 import os
 from pathlib import Path
@@ -7,27 +6,34 @@ from pathlib import Path
 ROOT = Path(__file__).parent
 RUNS_DIR = ROOT / "runs"
 MODEL_DIR = ROOT / "final_model"  # the agent's submitted model
-SEED = 0
 BASE_MODEL = os.environ.get("AUTOEMBED_BASE_MODEL", "microsoft/mpnet-base")
 
-# Fast dev proxy: NanoBEIR retrieval, minus MSMARCO and FiQA (held out).
-DEV_TASKS = ["NanoArguAnaRetrieval", "NanoClimateFeverRetrieval", "NanoDBPediaRetrieval",
-             "NanoFEVERRetrieval", "NanoHotpotQARetrieval", "NanoNFCorpusRetrieval",
-             "NanoNQRetrieval", "NanoQuoraRetrieval", "NanoSCIDOCSRetrieval",
-             "NanoSciFactRetrieval", "NanoTouche2020Retrieval"]
+# Dev proxy, disjoint from the held-out.
+DEV_TASKS = ["NanoArguAnaRetrieval", "NanoSCIDOCSRetrieval",   # retrieval
+             "STS12", "STSBenchmark",                          # STS
+             "Banking77Classification",                        # classification
+             "StackExchangeClustering.v2",                     # clustering
+             "AskUbuntuDupQuestions",                          # reranking
+             "SprintDuplicateQuestions"]                       # pair classification
 TASK_LANGS = ["eng"]
 
 
 def evaluate(model_path=MODEL_DIR, tasks=DEV_TASKS, tag="dev"):
     import mteb
     from sentence_transformers import SentenceTransformer
+    task_objs = mteb.get_tasks(tasks=tasks, languages=TASK_LANGS)
+    type_of = {t.metadata.name: t.metadata.type for t in task_objs}
     model = SentenceTransformer(str(model_path))
-    suite = mteb.MTEB(tasks=mteb.get_tasks(tasks=tasks, languages=TASK_LANGS))
-    results = suite.run(model, output_folder=str(RUNS_DIR / "mteb" / tag),
-                        verbosity=0, overwrite_results=True)
+    results = mteb.MTEB(tasks=task_objs).run(
+        model, output_folder=str(RUNS_DIR / "mteb" / tag),
+        verbosity=0, overwrite_results=True)
     per_task = {(getattr(r, "task_name", None) or r.task.metadata.name): float(r.get_score())
                 for r in results}
-    return sum(per_task.values()) / len(per_task), per_task
+    per_type = {}
+    for name, sc in per_task.items():
+        per_type.setdefault(type_of.get(name, name), []).append(sc)
+    type_means = [sum(v) / len(v) for v in per_type.values()]
+    return sum(type_means) / len(type_means), per_task
 
 
 def _norm(s):
@@ -62,9 +68,7 @@ def _eval_texts(tasks, cap=200_000):
 
 
 def check_contamination(train_dataset, tasks=None, sample=100_000):
-    # Exact-match overlap between training and eval text. Persists the sampled
-    # training text so the harness can audit held-out leakage afterward.
-    # Expects anchor/positive/negative columns (whichever are present).
+    # Exact-match overlap of training text with the eval; writes a training-text sample.
     tasks = tasks or DEV_TASKS
     evalset = _eval_texts(tasks)
     n = min(sample, len(train_dataset))
