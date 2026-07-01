@@ -1,6 +1,6 @@
 # Harness scoring of the agent's final_model, run OUTSIDE the agent's workdir so
-# the held-out tasks are never exposed. Reports dev (what the agent optimized),
-# hidden held-out (generalization), and a training-data contamination audit.
+# the held-out tasks are never exposed. Reports dev, hidden held-out, and a
+# training-data contamination audit; writes scores.json if an output path is given.
 import json
 import sys
 from pathlib import Path
@@ -11,6 +11,7 @@ from task import evaluate, _eval_texts, MODEL_DIR
 HELDOUT_TASKS = ["FiQA2018", "TRECCOVID", "CQADupstackEnglishRetrieval"]
 
 model = sys.argv[1] if len(sys.argv) > 1 else str(MODEL_DIR)
+out = sys.argv[2] if len(sys.argv) > 2 else None
 
 
 def main():
@@ -25,9 +26,11 @@ def main():
         hits = sum(1 for t in train if t in evalset)
         contam = {"hits": hits, "frac": round(hits / max(len(train), 1), 6)}
 
+    result = {"dev": dev, "heldout": ho, "dev_per_task": dev_per,
+              "heldout_per_task": ho_per, "contamination": contam}
     print(f"DEV={dev:.4f}  HELDOUT={ho:.4f}  contam={contam}")
-    print(f"dev_per_task={dev_per}")
-    print(f"heldout_per_task={ho_per}")
+    if out:
+        Path(out).write_text(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":
