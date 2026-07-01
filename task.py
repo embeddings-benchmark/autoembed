@@ -18,10 +18,17 @@ DEV_TASKS = ["NanoArguAnaRetrieval", "NanoSCIDOCSRetrieval",   # retrieval
 TASK_LANGS = ["eng"]
 
 
+def _resolve(tasks):   # accept task names or task objects
+    import mteb
+    if tasks and isinstance(tasks[0], str):
+        return mteb.get_tasks(tasks=tasks, languages=TASK_LANGS)
+    return list(tasks)
+
+
 def evaluate(model_path=MODEL_DIR, tasks=DEV_TASKS, tag="dev"):
     import mteb
     from sentence_transformers import SentenceTransformer
-    task_objs = mteb.get_tasks(tasks=tasks, languages=TASK_LANGS)
+    task_objs = _resolve(tasks)
     type_of = {t.metadata.name: t.metadata.type for t in task_objs}
     model = SentenceTransformer(str(model_path))
     results = mteb.MTEB(tasks=task_objs).run(
@@ -58,9 +65,8 @@ def _collect(obj, out, cap):
 
 
 def _eval_texts(tasks, cap=200_000):
-    import mteb
     out = set()
-    for t in mteb.get_tasks(tasks=tasks, languages=TASK_LANGS):
+    for t in _resolve(tasks):
         t.load_data()
         for attr in ("corpus", "queries", "dataset"):
             _collect(getattr(t, attr, None), out, cap)

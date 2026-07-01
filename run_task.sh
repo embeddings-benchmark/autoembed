@@ -34,7 +34,8 @@ sandbox() {   # run "$1" in the sandbox; the venv comes from the environment
     docker run --rm --gpus all -v "$WORK":/work -w /work \
       -e PROMPT -e AGENT_CONFIG -e DEADLINE -e AUTOEMBED_BASE_MODEL \
       -e UV_PROJECT_ENVIRONMENT=/opt/autoembed/.venv \
-      -e ANTHROPIC_API_KEY -e OPENAI_API_KEY -e GEMINI_API_KEY \
+      -e ANTHROPIC_API_KEY -e CLAUDE_CODE_OAUTH_TOKEN \
+      -e OPENAI_API_KEY -e GEMINI_API_KEY \
       autoembed bash -c "$1"
   fi
 }

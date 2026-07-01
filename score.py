@@ -5,10 +5,16 @@ import json
 import sys
 from pathlib import Path
 
+import mteb
+
 from task import evaluate, _eval_texts, MODEL_DIR
 
-# Held-out retrieval tasks: disjoint from the dev proxy and from the training data.
-HELDOUT_TASKS = ["FiQA2018", "TRECCOVID", "CQADupstackEnglishRetrieval"]
+# Held-out: MTEB(eng, v2) minus the dev datasets (MindSmall + StackExchange-P2P dropped).
+_RESERVED = {"ArguAna", "SCIDOCS", "STS12", "STSBenchmark", "Banking77Classification",
+             "StackExchangeClustering.v2", "StackExchangeClusteringP2P.v2",
+             "AskUbuntuDupQuestions", "SprintDuplicateQuestions", "MindSmallReranking"}
+HELDOUT_TASKS = [t for t in mteb.get_benchmark("MTEB(eng, v2)").tasks
+                 if t.metadata.name not in _RESERVED]
 
 model = sys.argv[1] if len(sys.argv) > 1 else str(MODEL_DIR)
 out = sys.argv[2] if len(sys.argv) > 2 else None
