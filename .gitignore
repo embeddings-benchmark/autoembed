@@ -1,15 +1,13 @@
-# model outputs & run artifacts (leaderboard.md is tracked; per-run files are local)
+# generated: models, checkpoints, eval outputs, per-run results
 out/
 final_model/
 results/
-runs/mteb/
-runs/_train_texts.json
-runs/*.json
-runs/heldout.md
-runs/reference.md
+runs/
+
 # python
 __pycache__/
 *.pyc
 .venv/
-# data caches
+
+# caches
 .cache/
