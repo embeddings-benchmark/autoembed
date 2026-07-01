@@ -1,29 +1,24 @@
 # Task
 
 Train a text-embedding model that scores as high as possible on the evaluation,
-starting from the fixed base model in `task.py` (`BASE_MODEL`). Save your best
-model to `final_model/` as a sentence-transformers model. We score `final_model/`
-once you stop.
+starting from the fixed base model in `task.py` (`BASE_MODEL`). Save your best model
+to `final_model/` as a sentence-transformers model; we score it once you stop.
 
-You have complete freedom over the method: architecture, loss, optimization, and
-training data — source your own datasets, generate synthetic data, mine hard
-negatives, implement methods from recent papers. `task.py` provides two helpers:
-- `evaluate("final_model")` — score on the dev proxy (what you optimize).
-- `check_contamination(train_ds)` — overlap of your training data (anchor/positive/
-  negative columns) with the eval; keep it near zero.
+You have complete freedom over the method — architecture, loss, optimization, and
+training data (your own datasets, synthetic data, hard negatives, methods from recent
+papers). How you iterate is up to you.
 
-## Loop
-1. Write training code that fine-tunes `BASE_MODEL` and saves to `final_model/`.
-2. Self-evaluate on the dev proxy:
-   `uv run --no-sync python -c "from task import evaluate; print(evaluate('final_model'))"`
-   Form a hypothesis, change one thing, keep it if dev went up, else revert.
-3. Check remaining budget with `bash timer.sh`; pace yourself and finalize before it hits 0.
+Tools you can use:
+- `uv run --no-sync python -c "from task import evaluate; print(evaluate('final_model'))"`
+  — score `final_model/` on the dev proxy (the number you're optimizing).
+- `check_contamination(train_ds)` in `task.py` — overlap of your training data
+  (anchor/positive/negative columns) with the eval.
+- `bash timer.sh` — remaining budget.
 
 ## Rules
-- Only fine-tune `BASE_MODEL`. Do not start from another already-trained model.
-- Do not modify `task.py` or the evaluation.
-- Do not train on the eval tasks' data. Run `check_contamination(train_ds)` on
-  your training set and keep it near zero.
-- A separate held-out set you cannot see is scored by the human. Chasing the dev
-  proxy with tricks that don't generalize will show up there and counts as a failure.
-- Never ask for feedback. Decide and act — we evaluate `final_model/` when you stop.
+- Only fine-tune `BASE_MODEL`; don't start from another already-trained model.
+- Don't modify `task.py` or the evaluation.
+- Don't train on the eval tasks' data (check with `check_contamination`).
+- A hidden held-out set is scored by the human; tricks that don't generalize show
+  up there and count as failure.
+- Never ask for feedback — decide and act. We score `final_model/` when you stop.
